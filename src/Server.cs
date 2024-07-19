@@ -8,6 +8,6 @@ Console.WriteLine("Logs from your program will appear here!");
 // Uncomment this block to pass the first stage
 TcpListener server = new TcpListener(IPAddress.Any, 4221);
 server.Start();
-server.AcceptSocket(); // wait for client
+var socket = server.AcceptSocket(); // wait for client
 var message = $"HTTP/1.1 200 OK{Environment.NewLine}{Environment.NewLine}";
-server.Server.Send(Encoding.UTF8.GetBytes(message));
+socket.Send(Encoding.UTF8.GetBytes(message));
