@@ -9,5 +9,5 @@ Console.WriteLine("Logs from your program will appear here!");
 TcpListener server = new TcpListener(IPAddress.Any, 4221);
 server.Start();
 var socket = server.AcceptSocket(); // wait for client
-var message = $"HTTP/1.1 200 OK{Environment.NewLine}{Environment.NewLine}";
+var message = "HTTP/1.1 200 OK\r\n\r\n";
 socket.Send(Encoding.UTF8.GetBytes(message));
