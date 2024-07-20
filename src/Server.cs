@@ -4,6 +4,7 @@ using System.Text;
 
 const string httpOkMessage = "HTTP/1.1 200 OK\r\n\r\n";
 const string httpNotFoundMessage = "HTTP/1.1 404 Not Found\r\n\r\n";
+const string rootPath = "/";
 
 var server = new TcpListener(IPAddress.Any, 4221);
 server.Start();
@@ -20,6 +21,6 @@ var message = Encoding.UTF8.GetString(buffer[..read]);
 var requestLine = message.Split("\r\n")[0];
 var requestTarget = requestLine.Split(" ")[1];
 
-var responseMessage = string.IsNullOrWhiteSpace(requestTarget) ? httpOkMessage : httpNotFoundMessage;
+var responseMessage = requestTarget == rootPath ? httpOkMessage : httpNotFoundMessage;
 
 socket.Send(Encoding.UTF8.GetBytes(responseMessage));
