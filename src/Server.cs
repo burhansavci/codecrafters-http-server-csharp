@@ -17,17 +17,30 @@ var message = Encoding.UTF8.GetString(buffer[..read]);
 var requestLine = message.Split("\r\n")[0];
 var requestTarget = requestLine.Split(" ")[1];
 
-var content = requestTarget.Split("/").Last();
-var headers = new Dictionary<string, string>
+HttpResponse responseMessage;
+var paths = requestTarget.Split("/");
+if (paths.Length == 0)
 {
-    { "Content-Type", "text/plain" },
-    { "Content-Length", content.Length.ToString() }
-};
-var responseMessage = new HttpResponse(HttpStatus.Ok, content, headers).ToString();
+    responseMessage = new HttpResponse(HttpStatus.Ok, string.Empty);
+}
+else if (paths.Contains("echo"))
+{
+    var content = paths.Last();
+    var headers = new Dictionary<string, string>
+    {
+        { "Content-Type", "text/plain" },
+        { "Content-Length", content.Length.ToString() }
+    };
+    responseMessage = new HttpResponse(HttpStatus.Ok, content, headers);
+}
+else
+{
+    responseMessage = new HttpResponse(HttpStatus.NotFound, "Not Found");
+}
 
-socket.Send(Encoding.UTF8.GetBytes(responseMessage));
+socket.Send(Encoding.UTF8.GetBytes(responseMessage.ToString()));
 
-record HttpResponse(HttpStatus Status, string Content, Dictionary<string, string> Headers)
+record HttpResponse(HttpStatus Status, string Content, Dictionary<string, string>? Headers = null)
 {
     public override string ToString()
     {
@@ -36,12 +49,15 @@ record HttpResponse(HttpStatus Status, string Content, Dictionary<string, string
         sb.Append(Status);
         sb.Append("\r\n");
 
-        foreach (var (key, value) in Headers)
+        if (Headers != null)
         {
-            sb.Append(key);
-            sb.Append(": ");
-            sb.Append(value);
-            sb.Append("\r\n");
+            foreach (var (key, value) in Headers)
+            {
+                sb.Append(key);
+                sb.Append(": ");
+                sb.Append(value);
+                sb.Append("\r\n");
+            }
         }
 
         sb.Append("\r\n");
@@ -51,9 +67,9 @@ record HttpResponse(HttpStatus Status, string Content, Dictionary<string, string
     }
 }
 
-
 record HttpStatus(int Code, string ReasonPhrase)
 {
     public static HttpStatus Ok => new(200, "OK");
+    public static HttpStatus NotFound => new(404, "Not Found");
     public override string ToString() => $"{Code} {ReasonPhrase}";
 }
