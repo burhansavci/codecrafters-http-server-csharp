@@ -18,7 +18,7 @@ var requestLine = message.Split("\r\n")[0];
 var requestTarget = requestLine.Split(" ")[1];
 
 HttpResponse responseMessage;
-var paths = requestTarget.Split("/");
+var paths = requestTarget.Split("/", StringSplitOptions.RemoveEmptyEntries);
 if (paths.Length == 0)
 {
     responseMessage = new HttpResponse(HttpStatus.Ok, string.Empty);
