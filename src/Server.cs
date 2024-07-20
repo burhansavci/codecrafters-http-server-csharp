@@ -43,7 +43,13 @@ else if (routes.Contains("user-agent"))
         .Select(header => header.Split(": "))
         .First(header => header[0] == "User-Agent")[1];
 
-    responseMessage = new HttpResponse(HttpStatus.Ok, userAgent);
+    var headers = new Dictionary<string, string>
+    {
+        { "Content-Type", "text/plain" },
+        { "Content-Length", userAgent.Length.ToString() }
+    };
+
+    responseMessage = new HttpResponse(HttpStatus.Ok, userAgent, headers);
 }
 else
 {
