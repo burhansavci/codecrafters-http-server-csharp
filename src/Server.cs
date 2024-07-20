@@ -2,12 +2,25 @@ using System.Net;
 using System.Net.Sockets;
 using System.Text;
 
-// You can use print statements as follows for debugging, they'll be visible when running tests.
-Console.WriteLine("Logs from your program will appear here!");
+const string httpOkMessage = @"HTTP/1.1 200 OK\r\n\r\n";
+const string httpNotFoundMessage = @"HTTP/1.1 404 Not Found\r\n\r\n";
 
-// Uncomment this block to pass the first stage
-TcpListener server = new TcpListener(IPAddress.Any, 4221);
+var server = new TcpListener(IPAddress.Any, 4221);
 server.Start();
+Console.WriteLine("Server started");
+
 var socket = server.AcceptSocket(); // wait for client
-var message = "HTTP/1.1 200 OK\r\n\r\n";
-socket.Send(Encoding.UTF8.GetBytes(message));
+Console.WriteLine("Client connected");
+
+var buffer = new byte[4096];
+
+int read = socket.Receive(buffer);
+
+
+var message = Encoding.UTF8.GetString(buffer[..read]);
+var requestLine = message.Split("\r\n")[0];
+var requestTarget = requestLine.Split(" ")[1];
+
+var responseMessage = string.IsNullOrWhiteSpace(requestTarget) ? httpOkMessage : httpNotFoundMessage;
+
+socket.Send(Encoding.UTF8.GetBytes(responseMessage));
