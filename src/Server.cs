@@ -7,17 +7,6 @@ listenSocket.Bind(new IPEndPoint(IPAddress.Loopback, 4221));
 
 Console.WriteLine($"Listening on {listenSocket.LocalEndPoint}");
 
-//current directory
-var currentDirectory = Directory.GetCurrentDirectory();
-Console.WriteLine($"Current directory: {currentDirectory}");
-
-// get arguments
-foreach (var arg in args)
-{
-    Console.WriteLine($"Argument: {arg}");
-}
-
-
 listenSocket.Listen();
 while (true)
 {
@@ -68,7 +57,7 @@ async Task HandleConnectionAsync(Socket connection)
         }
         else if (request.Route.Contains("files"))
         {
-            var filesDirectory = "/tmp/";
+            var filesDirectory = args.Last();
             var fileName = request.Route.Last();
             var filePath = Path.Combine(filesDirectory, fileName);
 
