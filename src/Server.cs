@@ -7,6 +7,10 @@ listenSocket.Bind(new IPEndPoint(IPAddress.Loopback, 4221));
 
 Console.WriteLine($"Listening on {listenSocket.LocalEndPoint}");
 
+//current directory
+var currentDirectory = Directory.GetCurrentDirectory();
+Console.WriteLine($"Current directory: {currentDirectory}");
+
 listenSocket.Listen();
 while (true)
 {
