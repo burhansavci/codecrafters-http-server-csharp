@@ -5,6 +5,7 @@ using System.Text;
 var server = new TcpListener(IPAddress.Any, 4221);
 server.Start();
 Console.WriteLine("Server started");
+
 while (true)
 {
     var socket = server.AcceptSocket(); // wait for client
