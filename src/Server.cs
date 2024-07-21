@@ -8,6 +8,10 @@ Console.WriteLine("Server started");
 while (true)
 {
     var socket = server.AcceptSocket(); // wait for client
+    socket.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.KeepAlive, true);
+    socket.SetSocketOption(SocketOptionLevel.Tcp, SocketOptionName.TcpKeepAliveTime, 5);
+    socket.SetSocketOption(SocketOptionLevel.Tcp, SocketOptionName.TcpKeepAliveInterval, 5);
+    socket.SetSocketOption(SocketOptionLevel.Tcp, SocketOptionName.TcpKeepAliveRetryCount, 5);
     Console.WriteLine("Client connected");
 
     var buffer = new byte[4096];
