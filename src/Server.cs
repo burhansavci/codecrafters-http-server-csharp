@@ -5,58 +5,61 @@ using System.Text;
 var server = new TcpListener(IPAddress.Any, 4221);
 server.Start();
 Console.WriteLine("Server started");
-
-var socket = server.AcceptSocket(); // wait for client
-Console.WriteLine("Client connected");
-
-var buffer = new byte[4096];
-
-int read = socket.Receive(buffer);
-
-var message = Encoding.UTF8.GetString(buffer[..read]);
-var httpRequestParts = message.Split("\r\n");
-var requestLine = httpRequestParts[0];
-var requestHeaders = httpRequestParts[1..^2];
-var requestBody = httpRequestParts[^1];
-
-var requestTarget = requestLine.Split(" ")[1];
-
-HttpResponse responseMessage;
-var routes = requestTarget.Split("/", StringSplitOptions.RemoveEmptyEntries);
-if (routes.Length == 0)
+while (true)
 {
-    responseMessage = new HttpResponse(HttpStatus.Ok, string.Empty);
-}
-else if (routes.Contains("echo"))
-{
-    var content = routes.Last();
-    var headers = new Dictionary<string, string>
+    var socket = server.AcceptSocket(); // wait for client
+    Console.WriteLine("Client connected");
+
+    var buffer = new byte[4096];
+
+    int read = socket.Receive(buffer);
+
+    var message = Encoding.UTF8.GetString(buffer[..read]);
+    var httpRequestParts = message.Split("\r\n");
+    var requestLine = httpRequestParts[0];
+    var requestHeaders = httpRequestParts[1..^2];
+    var requestBody = httpRequestParts[^1];
+
+    var requestTarget = requestLine.Split(" ")[1];
+
+    HttpResponse responseMessage;
+    var routes = requestTarget.Split("/", StringSplitOptions.RemoveEmptyEntries);
+    if (routes.Length == 0)
     {
-        { "Content-Type", "text/plain" },
-        { "Content-Length", content.Length.ToString() }
-    };
-    responseMessage = new HttpResponse(HttpStatus.Ok, content, headers);
-}
-else if (routes.Contains("user-agent"))
-{
-    var userAgent = requestHeaders
-        .Select(header => header.Split(": "))
-        .First(header => header[0] == "User-Agent")[1];
-
-    var headers = new Dictionary<string, string>
+        responseMessage = new HttpResponse(HttpStatus.Ok, string.Empty);
+    }
+    else if (routes.Contains("echo"))
     {
-        { "Content-Type", "text/plain" },
-        { "Content-Length", userAgent.Length.ToString() }
-    };
+        var content = routes.Last();
+        var headers = new Dictionary<string, string>
+        {
+            { "Content-Type", "text/plain" },
+            { "Content-Length", content.Length.ToString() }
+        };
+        responseMessage = new HttpResponse(HttpStatus.Ok, content, headers);
+    }
+    else if (routes.Contains("user-agent"))
+    {
+        var userAgent = requestHeaders
+            .Select(header => header.Split(": "))
+            .First(header => header[0] == "User-Agent")[1];
 
-    responseMessage = new HttpResponse(HttpStatus.Ok, userAgent, headers);
-}
-else
-{
-    responseMessage = new HttpResponse(HttpStatus.NotFound);
-}
+        var headers = new Dictionary<string, string>
+        {
+            { "Content-Type", "text/plain" },
+            { "Content-Length", userAgent.Length.ToString() }
+        };
 
-socket.Send(Encoding.UTF8.GetBytes(responseMessage.ToString()));
+        responseMessage = new HttpResponse(HttpStatus.Ok, userAgent, headers);
+    }
+    else
+    {
+        responseMessage = new HttpResponse(HttpStatus.NotFound);
+    }
+
+    socket.Send(Encoding.UTF8.GetBytes(responseMessage.ToString()));
+    socket.Dispose();
+}
 
 record HttpResponse(HttpStatus Status, string? Content = null, Dictionary<string, string>? Headers = null)
 {
