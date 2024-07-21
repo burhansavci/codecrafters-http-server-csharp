@@ -11,44 +11,41 @@ listenSocket.Listen();
 while (true)
 {
     // Wait for a new connection to arrive
-    var socket = await listenSocket.AcceptAsync();
+    var connection = await listenSocket.AcceptAsync();
 
     // We got a new connection spawn a task to so that we can echo the contents of the connection
-    _ = Task.Run(async () =>
+    _ = Task.Run(async () => await HandleConnectionAsync(connection));
+}
+
+
+async Task HandleConnectionAsync(Socket connection)
+{
+    var buffer = new byte[4096];
+    try
     {
-        var buffer = new byte[4096];
+        int read = await connection.ReceiveAsync(buffer);
 
-        int read = await socket.ReceiveAsync(buffer);
+        var request = GetHttpRequest(buffer[..read]);
 
-        var message = Encoding.UTF8.GetString(buffer[..read]);
-        var httpRequestParts = message.Split("\r\n");
-        var requestLine = httpRequestParts[0];
-        var requestHeaders = httpRequestParts[1..^2];
-        var requestBody = httpRequestParts[^1];
+        HttpResponse response;
 
-        var requestTarget = requestLine.Split(" ")[1];
-
-        HttpResponse responseMessage;
-        var routes = requestTarget.Split("/", StringSplitOptions.RemoveEmptyEntries);
-        if (routes.Length == 0)
+        if (request.Route.Length == 0)
         {
-            responseMessage = new HttpResponse(HttpStatus.Ok, string.Empty);
+            response = new HttpResponse(HttpStatus.Ok, string.Empty);
         }
-        else if (routes.Contains("echo"))
+        else if (request.Route.Contains("echo"))
         {
-            var content = routes.Last();
+            var content = request.Route.Last();
             var headers = new Dictionary<string, string>
             {
                 { "Content-Type", "text/plain" },
                 { "Content-Length", content.Length.ToString() }
             };
-            responseMessage = new HttpResponse(HttpStatus.Ok, content, headers);
+            response = new HttpResponse(HttpStatus.Ok, content, headers);
         }
-        else if (routes.Contains("user-agent"))
+        else if (request.Route.Contains("user-agent"))
         {
-            var userAgent = requestHeaders
-                .Select(header => header.Split(": "))
-                .First(header => header[0] == "User-Agent")[1];
+            var userAgent = request.Headers.GetValueOrDefault("User-Agent", string.Empty);
 
             var headers = new Dictionary<string, string>
             {
@@ -56,19 +53,71 @@ while (true)
                 { "Content-Length", userAgent.Length.ToString() }
             };
 
-            responseMessage = new HttpResponse(HttpStatus.Ok, userAgent, headers);
+            response = new HttpResponse(HttpStatus.Ok, userAgent, headers);
+        }
+        else if (request.Route.Contains("files"))
+        {
+            var filesDirectory = "/tmp/";
+            var fileName = request.Route.Last();
+            var filePath = Path.Combine(filesDirectory, fileName);
+
+            if (!File.Exists(filePath))
+            {
+                response = new HttpResponse(HttpStatus.NotFound);
+            }
+            else
+            {
+                var content = await File.ReadAllTextAsync(filePath);
+
+                var headers = new Dictionary<string, string>
+                {
+                    { "Content-Type", "application/octet-stream" },
+                    { "Content-Length", content.Length.ToString() }
+                };
+
+                response = new HttpResponse(HttpStatus.Ok, content, headers);
+            }
         }
         else
         {
-            responseMessage = new HttpResponse(HttpStatus.NotFound);
+            response = new HttpResponse(HttpStatus.NotFound);
         }
 
-        await socket.SendAsync(Encoding.UTF8.GetBytes(responseMessage.ToString()));
-        socket.Dispose();
-    });
+        await connection.SendAsync(Encoding.UTF8.GetBytes(response.ToString()));
+    }
+    finally
+    {
+        connection.Dispose();
+    }
 }
 
-record HttpResponse(HttpStatus Status, string? Content = null, Dictionary<string, string>? Headers = null)
+
+HttpRequest GetHttpRequest(byte[] messageBuffer)
+{
+    var message = Encoding.UTF8.GetString(messageBuffer);
+
+    var httpRequestParts = message.Split("\r\n");
+    var requestLine = httpRequestParts[0];
+    var requestHeaders = httpRequestParts[1..^2];
+    var requestBody = httpRequestParts[^1];
+
+    var requestLineParts = requestLine.Split(" ");
+    var method = requestLineParts[0];
+    var requestTarget = requestLineParts[1];
+    var httpVersion = requestLineParts[2];
+
+    var routes = requestTarget.Split("/", StringSplitOptions.RemoveEmptyEntries);
+
+    var headers = requestHeaders
+        .Select(header => header.Split(": "))
+        .ToDictionary(header => header[0], header => header[1]);
+
+    return new HttpRequest(method, requestTarget, routes, httpVersion, headers, requestBody);
+}
+
+record HttpRequest(string Method, string RequestTarget, string[] Route, string HttpVersion, Dictionary<string, string> Headers, string Body);
+
+record HttpResponse(HttpStatus Status, string? Body = null, Dictionary<string, string>? Headers = null)
 {
     public override string ToString()
     {
@@ -89,7 +138,7 @@ record HttpResponse(HttpStatus Status, string? Content = null, Dictionary<string
         }
 
         sb.Append("\r\n");
-        sb.Append(Content);
+        sb.Append(Body);
 
         return sb.ToString();
     }
