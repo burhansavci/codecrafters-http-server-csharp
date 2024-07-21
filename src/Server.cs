@@ -11,6 +11,13 @@ Console.WriteLine($"Listening on {listenSocket.LocalEndPoint}");
 var currentDirectory = Directory.GetCurrentDirectory();
 Console.WriteLine($"Current directory: {currentDirectory}");
 
+// get arguments
+foreach (var arg in args)
+{
+    Console.WriteLine($"Argument: {arg}");
+}
+
+
 listenSocket.Listen();
 while (true)
 {
