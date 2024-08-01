@@ -57,25 +57,40 @@ async Task HandleConnectionAsync(Socket connection)
         }
         else if (request.Route.Contains("files"))
         {
-            var filesDirectory = args.Last();
-            var fileName = request.Route.Last();
-            var filePath = Path.Combine(filesDirectory, fileName);
-
-            if (!File.Exists(filePath))
+            if (request.Method == "GET")
             {
-                response = new HttpResponse(HttpStatus.NotFound);
+                var filesDirectory = args.Last();
+                var fileName = request.Route.Last();
+                var filePath = Path.Combine(filesDirectory, fileName);
+
+                if (!File.Exists(filePath))
+                {
+                    response = new HttpResponse(HttpStatus.NotFound);
+                }
+                else
+                {
+                    var content = await File.ReadAllTextAsync(filePath);
+
+                    var headers = new Dictionary<string, string>
+                    {
+                        { "Content-Type", "application/octet-stream" },
+                        { "Content-Length", content.Length.ToString() }
+                    };
+
+                    response = new HttpResponse(HttpStatus.Ok, content, headers);
+                }
             }
             else
             {
-                var content = await File.ReadAllTextAsync(filePath);
+                var body = request.Body;
 
-                var headers = new Dictionary<string, string>
-                {
-                    { "Content-Type", "application/octet-stream" },
-                    { "Content-Length", content.Length.ToString() }
-                };
+                var filesDirectory = args.Last();
+                var fileName = request.Route.Last();
+                var filePath = Path.Combine(filesDirectory, fileName);
 
-                response = new HttpResponse(HttpStatus.Ok, content, headers);
+                await File.WriteAllTextAsync(filePath, body);
+
+                response = new HttpResponse(HttpStatus.Created);
             }
         }
         else
@@ -147,6 +162,8 @@ record HttpResponse(HttpStatus Status, string? Body = null, Dictionary<string, s
 record HttpStatus(int Code, string ReasonPhrase)
 {
     public static HttpStatus Ok => new(200, "OK");
+    public static HttpStatus Created => new(201, "Created");
     public static HttpStatus NotFound => new(404, "Not Found");
+
     public override string ToString() => $"{Code} {ReasonPhrase}";
 }
