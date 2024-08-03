@@ -24,7 +24,7 @@ endpointBuilder.Get("echo/{str}", async request =>
 
         var buffer = new byte[4 * 1024];
         using var compressedContentStream = new MemoryStream();
-        await using (var compressor = new GZipStream(compressedContentStream, CompressionMode.Compress))
+        await using (var compressor = new GZipStream(compressedContentStream, CompressionLevel.Fastest, true))
             await compressor.WriteAsync(buffer);
 
         content = Encoding.UTF8.GetString(compressedContentStream.ToArray());
