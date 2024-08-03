@@ -1,3 +1,4 @@
+using System.IO.Compression;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
@@ -13,12 +14,24 @@ endpointBuilder.Get("echo/{str}", request =>
     var headers = new Dictionary<string, string>
     {
         { "Content-Type", "text/plain" },
-        { "Content-Length", content.Length.ToString() }
     };
 
     var encodingTypes = request.Headers.GetValueOrDefault("Accept-Encoding", string.Empty).Split(", ", StringSplitOptions.RemoveEmptyEntries);
+
     if (encodingTypes.Contains("gzip"))
+    {
         headers.Add("Content-Encoding", "gzip");
+
+        using var originalContentStream = new MemoryStream(Encoding.UTF8.GetBytes(content));
+        using var compressedContentStream = new MemoryStream();
+        using var compressor = new GZipStream(compressedContentStream, CompressionMode.Compress);
+        originalContentStream.CopyTo(compressor);
+        
+        content = Encoding.UTF8.GetString(compressedContentStream.ToArray());
+    }
+
+
+    headers.Add("Content-Length", content.Length.ToString());
 
     return Task.FromResult(new HttpResponse(HttpStatus.Ok, content, headers));
 });
