@@ -2,6 +2,76 @@ using System.Net;
 using System.Net.Sockets;
 using System.Text;
 
+var endpointBuilder = new EndpointBuilder();
+
+endpointBuilder.Get("", _ => Task.FromResult(new HttpResponse(HttpStatus.Ok, string.Empty)));
+
+endpointBuilder.Get("echo/{str}", request =>
+{
+    var content = request.Route.Last();
+
+    var headers = new Dictionary<string, string>
+    {
+        { "Content-Type", "text/plain" },
+        { "Content-Length", content.Length.ToString() }
+    };
+
+    var encodingType = request.Headers.GetValueOrDefault("Accept-Encoding");
+    if (encodingType == "gzip")
+        headers.Add("Content-Encoding", "gzip");
+
+    return Task.FromResult(new HttpResponse(HttpStatus.Ok, content, headers));
+});
+
+endpointBuilder.Get("user-agent", request =>
+{
+    var userAgent = request.Headers.GetValueOrDefault("User-Agent", string.Empty);
+
+    var headers = new Dictionary<string, string>
+    {
+        { "Content-Type", "text/plain" },
+        { "Content-Length", userAgent.Length.ToString() }
+    };
+
+    return Task.FromResult(new HttpResponse(HttpStatus.Ok, userAgent, headers));
+});
+
+endpointBuilder.Get("files/{fileName}", async request =>
+{
+    var filesDirectory = args.Last();
+    var fileName = request.Route.Last();
+    var filePath = Path.Combine(filesDirectory, fileName);
+
+    if (!File.Exists(filePath))
+    {
+        return new HttpResponse(HttpStatus.NotFound);
+    }
+
+    var content = await File.ReadAllTextAsync(filePath);
+
+    var headers = new Dictionary<string, string>
+    {
+        { "Content-Type", "application/octet-stream" },
+        { "Content-Length", content.Length.ToString() }
+    };
+
+    return new HttpResponse(HttpStatus.Ok, content, headers);
+});
+
+endpointBuilder.Post("files/{fileName}", async request =>
+{
+    var body = request.Body;
+
+    var filesDirectory = args.Last();
+    var fileName = request.Route.Last();
+    var filePath = Path.Combine(filesDirectory, fileName);
+
+    await File.WriteAllTextAsync(filePath, body);
+    return new HttpResponse(HttpStatus.Created);
+});
+
+var routes = EndpointBuilder.Build();
+
 using var listenSocket = new Socket(SocketType.Stream, ProtocolType.Tcp);
 listenSocket.Bind(new IPEndPoint(IPAddress.Loopback, 4221));
 
@@ -17,86 +87,22 @@ while (true)
     _ = Task.Run(async () => await HandleConnectionAsync(connection));
 }
 
-
 async Task HandleConnectionAsync(Socket connection)
 {
-    var buffer = new byte[4096];
+    var buffer = new byte[4 * 1024];
     try
     {
         int read = await connection.ReceiveAsync(buffer);
 
         var request = GetHttpRequest(buffer[..read]);
 
-        HttpResponse response;
+        var routePattern = EndpointBuilder.FindRoutePattern(request.RequestTarget, request.Method);
 
-        if (request.Route.Length == 0)
-        {
-            response = new HttpResponse(HttpStatus.Ok, string.Empty);
-        }
-        else if (request.Route.Contains("echo"))
-        {
-            var content = request.Route.Last();
-            var headers = new Dictionary<string, string>
-            {
-                { "Content-Type", "text/plain" },
-                { "Content-Length", content.Length.ToString() }
-            };
-            response = new HttpResponse(HttpStatus.Ok, content, headers);
-        }
-        else if (request.Route.Contains("user-agent"))
-        {
-            var userAgent = request.Headers.GetValueOrDefault("User-Agent", string.Empty);
+        var requestHandler = routePattern is not null
+            ? routes.GetValueOrDefault(routePattern.Value, _ => Task.FromResult(new HttpResponse(HttpStatus.NotFound)))
+            : _ => Task.FromResult(new HttpResponse(HttpStatus.NotFound));
 
-            var headers = new Dictionary<string, string>
-            {
-                { "Content-Type", "text/plain" },
-                { "Content-Length", userAgent.Length.ToString() }
-            };
-
-            response = new HttpResponse(HttpStatus.Ok, userAgent, headers);
-        }
-        else if (request.Route.Contains("files"))
-        {
-            if (request.Method == "GET")
-            {
-                var filesDirectory = args.Last();
-                var fileName = request.Route.Last();
-                var filePath = Path.Combine(filesDirectory, fileName);
-
-                if (!File.Exists(filePath))
-                {
-                    response = new HttpResponse(HttpStatus.NotFound);
-                }
-                else
-                {
-                    var content = await File.ReadAllTextAsync(filePath);
-
-                    var headers = new Dictionary<string, string>
-                    {
-                        { "Content-Type", "application/octet-stream" },
-                        { "Content-Length", content.Length.ToString() }
-                    };
-
-                    response = new HttpResponse(HttpStatus.Ok, content, headers);
-                }
-            }
-            else
-            {
-                var body = request.Body;
-
-                var filesDirectory = args.Last();
-                var fileName = request.Route.Last();
-                var filePath = Path.Combine(filesDirectory, fileName);
-
-                await File.WriteAllTextAsync(filePath, body);
-
-                response = new HttpResponse(HttpStatus.Created);
-            }
-        }
-        else
-        {
-            response = new HttpResponse(HttpStatus.NotFound);
-        }
+        var response = await requestHandler(request);
 
         await connection.SendAsync(Encoding.UTF8.GetBytes(response.ToString()));
     }
@@ -105,7 +111,6 @@ async Task HandleConnectionAsync(Socket connection)
         connection.Dispose();
     }
 }
-
 
 HttpRequest GetHttpRequest(byte[] messageBuffer)
 {
@@ -121,16 +126,16 @@ HttpRequest GetHttpRequest(byte[] messageBuffer)
     var requestTarget = requestLineParts[1];
     var httpVersion = requestLineParts[2];
 
-    var routes = requestTarget.Split("/", StringSplitOptions.RemoveEmptyEntries);
+    var routeSections = requestTarget.Split("/", StringSplitOptions.RemoveEmptyEntries);
 
     var headers = requestHeaders
         .Select(header => header.Split(": "))
         .ToDictionary(header => header[0], header => header[1]);
 
-    return new HttpRequest(method, requestTarget, routes, httpVersion, headers, requestBody);
+    return new HttpRequest(new HttpMethod(method), requestTarget, routeSections, httpVersion, headers, requestBody);
 }
 
-record HttpRequest(string Method, string RequestTarget, string[] Route, string HttpVersion, Dictionary<string, string> Headers, string Body);
+record HttpRequest(HttpMethod Method, string RequestTarget, string[] Route, string HttpVersion, Dictionary<string, string> Headers, string Body);
 
 record HttpResponse(HttpStatus Status, string? Body = null, Dictionary<string, string>? Headers = null)
 {
@@ -159,6 +164,13 @@ record HttpResponse(HttpStatus Status, string? Body = null, Dictionary<string, s
     }
 }
 
+record HttpMethod(string Method)
+{
+    public static HttpMethod Get => new("GET");
+    public static HttpMethod Post => new("POST");
+    public override string ToString() => Method;
+}
+
 record HttpStatus(int Code, string ReasonPhrase)
 {
     public static HttpStatus Ok => new(200, "OK");
@@ -166,4 +178,67 @@ record HttpStatus(int Code, string ReasonPhrase)
     public static HttpStatus NotFound => new(404, "Not Found");
 
     public override string ToString() => $"{Code} {ReasonPhrase}";
+}
+
+record RoutePattern(string Route)
+{
+    private const string SeparatorString = "/";
+
+    public string[] RoutePatternSegments => Route.Split(SeparatorString, StringSplitOptions.RemoveEmptyEntries).ToArray();
+
+    public static implicit operator RoutePattern(string route) => new(route);
+}
+
+
+class EndpointBuilder
+{
+    private static readonly Dictionary<(RoutePattern route, HttpMethod method), Func<HttpRequest, Task<HttpResponse>>> Routes = new();
+
+    public EndpointBuilder Get(string route, Func<HttpRequest, Task<HttpResponse>> handler)
+    {
+        Routes.Add((route, HttpMethod.Get), handler);
+        return this;
+    }
+
+    public EndpointBuilder Post(string route, Func<HttpRequest, Task<HttpResponse>> handler)
+    {
+        Routes.Add((route, HttpMethod.Post), handler);
+        return this;
+    }
+
+    public static Dictionary<(RoutePattern route, HttpMethod method), Func<HttpRequest, Task<HttpResponse>>> Build()
+    {
+        return Routes;
+    }
+
+    public static (RoutePattern route, HttpMethod method)? FindRoutePattern(string requestTarget, HttpMethod method)
+    {
+        var routePattern = new RoutePattern(requestTarget);
+
+        var existingRoutePatterns = Routes.Keys.ToArray();
+
+        var matchingRoutePattern = existingRoutePatterns.FirstOrDefault(existingRoutePattern =>
+        {
+            var existingRoutePatternSegments = existingRoutePattern.route.RoutePatternSegments;
+            var routePatternSegments = routePattern.RoutePatternSegments;
+
+            if (existingRoutePatternSegments.Length != routePatternSegments.Length)
+                return false;
+
+            if (existingRoutePattern.method != method)
+                return false;
+
+            for (var i = 0; i < existingRoutePatternSegments.Length; i++)
+            {
+                if (existingRoutePatternSegments[i] != routePatternSegments[i] && !existingRoutePatternSegments[i].StartsWith("{") && !existingRoutePatternSegments[i].EndsWith("}"))
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        });
+
+        return matchingRoutePattern;
+    }
 }
