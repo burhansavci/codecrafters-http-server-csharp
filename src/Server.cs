@@ -27,9 +27,9 @@ endpointBuilder.Get("echo/{str}", async request =>
         await using (var compressor = new GZipStream(compressedContentStream, CompressionLevel.Fastest, true))
             await compressor.WriteAsync(buffer);
 
-        content = BitConverter.ToString(compressedContentStream.ToArray());
+        content = BitConverter.ToString(compressedContentStream.ToArray()).Replace("-", " ");
     }
-
+    
     headers.Add("Content-Length", content.Length.ToString());
 
     return new HttpResponse(HttpStatus.Ok, content, headers);
