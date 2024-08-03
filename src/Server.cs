@@ -7,7 +7,7 @@ var endpointBuilder = new EndpointBuilder();
 
 endpointBuilder.Get("", _ => Task.FromResult(new HttpResponse(HttpStatus.Ok, string.Empty)));
 
-endpointBuilder.Get("echo/{str}", request =>
+endpointBuilder.Get("echo/{str}", async request =>
 {
     var content = request.Route.Last();
 
@@ -22,18 +22,18 @@ endpointBuilder.Get("echo/{str}", request =>
     {
         headers.Add("Content-Encoding", "gzip");
 
-        using var originalContentStream = new MemoryStream(Encoding.UTF8.GetBytes(content));
+        var buffer = new byte[4 * 1024];
         using var compressedContentStream = new MemoryStream();
-        using var compressor = new GZipStream(compressedContentStream, CompressionMode.Compress);
-        originalContentStream.CopyTo(compressor);
-        
+        await using (var compressor = new GZipStream(compressedContentStream, CompressionMode.Compress))
+            await compressor.WriteAsync(buffer);
+
         content = Encoding.UTF8.GetString(compressedContentStream.ToArray());
     }
 
 
     headers.Add("Content-Length", content.Length.ToString());
 
-    return Task.FromResult(new HttpResponse(HttpStatus.Ok, content, headers));
+    return new HttpResponse(HttpStatus.Ok, content, headers);
 });
 
 endpointBuilder.Get("user-agent", request =>
