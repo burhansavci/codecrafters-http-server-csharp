@@ -16,8 +16,8 @@ endpointBuilder.Get("echo/{str}", request =>
         { "Content-Length", content.Length.ToString() }
     };
 
-    var encodingType = request.Headers.GetValueOrDefault("Accept-Encoding");
-    if (encodingType == "gzip")
+    var encodingTypes = request.Headers.GetValueOrDefault("Accept-Encoding", string.Empty).Split(", ", StringSplitOptions.RemoveEmptyEntries);
+    if (encodingTypes.Contains("gzip"))
         headers.Add("Content-Encoding", "gzip");
 
     return Task.FromResult(new HttpResponse(HttpStatus.Ok, content, headers));
