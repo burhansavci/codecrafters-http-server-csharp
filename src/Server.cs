@@ -5,7 +5,7 @@ using System.Text;
 
 var endpointBuilder = new EndpointBuilder();
 
-endpointBuilder.Get("", _ => Task.FromResult(new HttpResponse(HttpStatus.Ok, string.Empty)));
+endpointBuilder.Get("", _ => Task.FromResult<IHttpResponse>(new HttpResponse(HttpStatus.Ok, string.Empty)));
 
 endpointBuilder.Get("echo/{str}", async request =>
 {
@@ -30,7 +30,7 @@ endpointBuilder.Get("echo/{str}", async request =>
 
         headers.Add("Content-Length", compressedContent.Length.ToString());
 
-        return new HttpResponse(HttpStatus.Ok, Convert.ToBase64String(compressedContent), headers);
+        return new FileHttpResponse(HttpStatus.Ok, compressedContent, headers);
     }
 
     headers.Add("Content-Length", content.Length.ToString());
@@ -48,7 +48,7 @@ endpointBuilder.Get("user-agent", request =>
         { "Content-Length", userAgent.Length.ToString() }
     };
 
-    return Task.FromResult(new HttpResponse(HttpStatus.Ok, userAgent, headers));
+    return Task.FromResult<IHttpResponse>(new HttpResponse(HttpStatus.Ok, userAgent, headers));
 });
 
 endpointBuilder.Get("files/{fileName}", async request =>
@@ -113,13 +113,11 @@ async Task HandleConnectionAsync(Socket connection)
 
         var routePattern = EndpointBuilder.FindRoutePattern(request.RequestTarget, request.Method);
 
-        var requestHandler = routePattern is not null
-            ? routes.GetValueOrDefault(routePattern.Value, _ => Task.FromResult(new HttpResponse(HttpStatus.NotFound)))
-            : _ => Task.FromResult(new HttpResponse(HttpStatus.NotFound));
+        var requestHandler = routes.GetValueOrDefault(routePattern.GetValueOrDefault(), _ => Task.FromResult<IHttpResponse>(new HttpResponse(HttpStatus.NotFound)));
 
         var response = await requestHandler(request);
 
-        await connection.SendAsync(Encoding.UTF8.GetBytes(response.ToString()));
+        await connection.SendAsync(response.Render());
     }
     finally
     {
@@ -152,8 +150,13 @@ HttpRequest GetHttpRequest(byte[] messageBuffer)
 
 record HttpRequest(HttpMethod Method, string RequestTarget, string[] Route, string HttpVersion, Dictionary<string, string> Headers, string Body);
 
-record HttpResponse(HttpStatus Status, string? Body = null, Dictionary<string, string>? Headers = null)
+record HttpResponse(HttpStatus Status, string? Body = null, Dictionary<string, string>? Headers = null) : IHttpResponse
 {
+    public byte[] Render()
+    {
+        return Encoding.UTF8.GetBytes(ToString());
+    }
+
     public override string ToString()
     {
         var sb = new StringBuilder();
@@ -177,6 +180,42 @@ record HttpResponse(HttpStatus Status, string? Body = null, Dictionary<string, s
 
         return sb.ToString();
     }
+}
+
+record FileHttpResponse(HttpStatus Status, byte[] Body, Dictionary<string, string>? Headers = null) : IHttpResponse
+{
+    public byte[] Render()
+    {
+        var sb = new StringBuilder();
+        sb.Append("HTTP/1.1 ");
+        sb.Append(Status);
+        sb.Append("\r\n");
+
+        if (Headers != null)
+        {
+            foreach (var (key, value) in Headers)
+            {
+                sb.Append(key);
+                sb.Append(": ");
+                sb.Append(value);
+                sb.Append("\r\n");
+            }
+        }
+
+        sb.Append("\r\n");
+
+        var response = Encoding.UTF8.GetBytes(sb.ToString());
+        var responseWithBody = new byte[response.Length + Body.Length];
+        response.CopyTo(responseWithBody, 0);
+        Body.CopyTo(responseWithBody, response.Length);
+
+        return responseWithBody;
+    }
+}
+
+interface IHttpResponse
+{
+    byte[] Render();
 }
 
 record HttpMethod(string Method)
@@ -207,21 +246,21 @@ record RoutePattern(string Route)
 
 class EndpointBuilder
 {
-    private static readonly Dictionary<(RoutePattern route, HttpMethod method), Func<HttpRequest, Task<HttpResponse>>> Routes = new();
+    private static readonly Dictionary<(RoutePattern route, HttpMethod method), Func<HttpRequest, Task<IHttpResponse>>> Routes = new();
 
-    public EndpointBuilder Get(string route, Func<HttpRequest, Task<HttpResponse>> handler)
+    public EndpointBuilder Get(string route, Func<HttpRequest, Task<IHttpResponse>> handler)
     {
         Routes.Add((route, HttpMethod.Get), handler);
         return this;
     }
 
-    public EndpointBuilder Post(string route, Func<HttpRequest, Task<HttpResponse>> handler)
+    public EndpointBuilder Post(string route, Func<HttpRequest, Task<IHttpResponse>> handler)
     {
         Routes.Add((route, HttpMethod.Post), handler);
         return this;
     }
 
-    public static Dictionary<(RoutePattern route, HttpMethod method), Func<HttpRequest, Task<HttpResponse>>> Build()
+    public static Dictionary<(RoutePattern route, HttpMethod method), Func<HttpRequest, Task<IHttpResponse>>> Build()
     {
         return Routes;
     }
