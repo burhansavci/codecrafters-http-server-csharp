@@ -22,14 +22,17 @@ endpointBuilder.Get("echo/{str}", async request =>
     {
         headers.Add("Content-Encoding", "gzip");
 
-        var buffer = new byte[4 * 1024];
         using var compressedContentStream = new MemoryStream();
-        await using (var compressor = new GZipStream(compressedContentStream, CompressionLevel.Fastest, true))
-            await compressor.WriteAsync(buffer);
+        await using (var compressor = new GZipStream(compressedContentStream, CompressionMode.Compress))
+            await compressor.WriteAsync(Encoding.UTF8.GetBytes(content));
 
-        content = BitConverter.ToString(compressedContentStream.ToArray()).Replace("-", " ");
+        var compressedContent = compressedContentStream.ToArray();
+
+        headers.Add("Content-Length", compressedContent.Length.ToString());
+
+        return new HttpResponse(HttpStatus.Ok, Convert.ToBase64String(compressedContent), headers);
     }
-    
+
     headers.Add("Content-Length", content.Length.ToString());
 
     return new HttpResponse(HttpStatus.Ok, content, headers);
