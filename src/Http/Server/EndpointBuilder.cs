@@ -9,13 +9,13 @@ internal class EndpointBuilder
 
     public EndpointBuilder Get(string route, Func<HttpRequest, Task<IHttpResponse>> handler)
     {
-        Routes.Add((route, HttpMethod.Get), handler);
+        AddRoute(route, HttpMethod.Get, handler);
         return this;
     }
 
     public EndpointBuilder Post(string route, Func<HttpRequest, Task<IHttpResponse>> handler)
     {
-        Routes.Add((route, HttpMethod.Post), handler);
+        AddRoute(route, HttpMethod.Post, handler);
         return this;
     }
 
@@ -26,32 +26,28 @@ internal class EndpointBuilder
 
     public static (RoutePattern route, HttpMethod method)? FindRoutePattern(string requestTarget, HttpMethod method)
     {
-        var routePattern = new RoutePattern(requestTarget);
+        var routePatternToFind = new RoutePattern(requestTarget);
 
-        var existingRoutePatterns = Routes.Keys.ToArray();
-
-        var matchingRoutePattern = existingRoutePatterns.FirstOrDefault(existingRoutePattern =>
+        foreach (var (routePattern, routeMethod) in Routes.Keys)
         {
-            var existingRoutePatternSegments = existingRoutePattern.route.RoutePatternSegments;
-            var routePatternSegments = routePattern.RoutePatternSegments;
+            if (routeMethod != method)
+                continue;
 
-            if (existingRoutePatternSegments.Length != routePatternSegments.Length)
-                return false;
+            if (routePattern.IsMatch(routePatternToFind))
+                return (routePattern, routeMethod);
+        }
 
-            if (existingRoutePattern.method != method)
-                return false;
+        return null;
+    }
+    
+    private static void AddRoute(string route, HttpMethod method, Func<HttpRequest, Task<IHttpResponse>> handler)
+    {
+        var routePattern = new RoutePattern(route);
+        var key = (routePattern, method);
 
-            for (var i = 0; i < existingRoutePatternSegments.Length; i++)
-            {
-                if (existingRoutePatternSegments[i] != routePatternSegments[i] && !existingRoutePatternSegments[i].StartsWith("{") && !existingRoutePatternSegments[i].EndsWith("}"))
-                {
-                    return false;
-                }
-            }
-
-            return true;
-        });
-
-        return matchingRoutePattern;
+        if (!Routes.TryAdd(key, handler))
+        {
+            throw new ArgumentException($"A route already exists for {method} {route}");
+        }
     }
 }
