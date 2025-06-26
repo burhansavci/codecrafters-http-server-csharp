@@ -6,7 +6,7 @@ using codecrafters_http_server.Http.Server;
 
 var endpointBuilder = new EndpointBuilder();
 
-endpointBuilder.Get("", _ => Task.FromResult<IHttpResponse>(new HttpResponse(HttpStatus.Ok, string.Empty)));
+endpointBuilder.Get("", _ => Task.FromResult<IHttpResponse>(new HttpResponse(HttpStatus.Ok)));
 
 endpointBuilder.Get("echo/{str}", async request =>
 {
