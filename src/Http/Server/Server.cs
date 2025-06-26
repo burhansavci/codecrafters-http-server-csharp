@@ -37,10 +37,9 @@ internal class HttpServer(EndpointBuilder endpointBuilder)
         {
             while (connection.Connected)
             {
-                int read = await connection.ReceiveAsync(buffer);
+                var read = await connection.ReceiveAsync(buffer);
 
-                if (read <= 0)
-                    break;
+                if (read <= 0) break;
 
                 var request = GetHttpRequest(buffer[..read]);
 
@@ -50,7 +49,15 @@ internal class HttpServer(EndpointBuilder endpointBuilder)
 
                 var response = await requestHandler(request);
 
+                var shouldCloseConnection = ShouldCloseConnection(request);
+
+                if (shouldCloseConnection && response is HttpResponse httpResponse)
+                    httpResponse.Headers["Connection"] = "close";
+
                 await connection.SendAsync(response.Render());
+
+                if (shouldCloseConnection)
+                    break;
             }
         }
         finally
@@ -81,4 +88,7 @@ internal class HttpServer(EndpointBuilder endpointBuilder)
 
         return new HttpRequest(new HttpMethod(method), requestTarget, routeSections, httpVersion, headers, requestBody);
     }
+
+    private static bool ShouldCloseConnection(HttpRequest request) => request.Headers.TryGetValue("Connection", out var connectionHeader)
+                                                                      && connectionHeader.Equals("close", StringComparison.OrdinalIgnoreCase);
 }

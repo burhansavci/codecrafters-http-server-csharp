@@ -4,6 +4,8 @@ namespace codecrafters_http_server.Http.Response;
 
 internal record HttpResponse(HttpStatus Status, string? Body = null, Dictionary<string, string>? Headers = null) : IHttpResponse
 {
+    public Dictionary<string, string> Headers { get; } = Headers ?? new Dictionary<string, string>();
+
     public byte[] Render()
     {
         return Encoding.UTF8.GetBytes(ToString());
@@ -16,15 +18,12 @@ internal record HttpResponse(HttpStatus Status, string? Body = null, Dictionary<
         sb.Append(Status);
         sb.Append("\r\n");
 
-        if (Headers != null)
+        foreach (var (key, value) in Headers)
         {
-            foreach (var (key, value) in Headers)
-            {
-                sb.Append(key);
-                sb.Append(": ");
-                sb.Append(value);
-                sb.Append("\r\n");
-            }
+            sb.Append(key);
+            sb.Append(": ");
+            sb.Append(value);
+            sb.Append("\r\n");
         }
 
         sb.Append("\r\n");
