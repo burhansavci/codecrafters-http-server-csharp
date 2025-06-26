@@ -35,17 +35,23 @@ internal class HttpServer(EndpointBuilder endpointBuilder)
         var buffer = new byte[4 * 1024];
         try
         {
-            int read = await connection.ReceiveAsync(buffer);
+            while (connection.Connected)
+            {
+                int read = await connection.ReceiveAsync(buffer);
 
-            var request = GetHttpRequest(buffer[..read]);
+                if (read <= 0)
+                    break;
 
-            var routePattern = EndpointBuilder.FindRoutePattern(request.RequestTarget, request.Method);
+                var request = GetHttpRequest(buffer[..read]);
 
-            var requestHandler = _routes.GetValueOrDefault(routePattern.GetValueOrDefault(), _ => Task.FromResult<IHttpResponse>(new HttpResponse(HttpStatus.NotFound)));
+                var routePattern = EndpointBuilder.FindRoutePattern(request.RequestTarget, request.Method);
 
-            var response = await requestHandler(request);
+                var requestHandler = _routes.GetValueOrDefault(routePattern.GetValueOrDefault(), _ => Task.FromResult<IHttpResponse>(new HttpResponse(HttpStatus.NotFound)));
 
-            await connection.SendAsync(response.Render());
+                var response = await requestHandler(request);
+
+                await connection.SendAsync(response.Render());
+            }
         }
         finally
         {

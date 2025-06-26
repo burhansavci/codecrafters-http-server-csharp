@@ -1,6 +1,5 @@
 using System.IO.Compression;
 using System.Text;
-using codecrafters_http_server;
 using codecrafters_http_server.Http;
 using codecrafters_http_server.Http.Response;
 using codecrafters_http_server.Http.Server;
