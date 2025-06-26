@@ -6,7 +6,7 @@ internal record RoutePattern(string Route)
     private const string RouteParameterStart = "{";
     private const string RouteParameterEnd = "}";
 
-    public string[] RoutePatternSegments => Route.Split(SeparatorString, StringSplitOptions.RemoveEmptyEntries).ToArray();
+    private string[] RoutePatternSegments => Route.Split(SeparatorString, StringSplitOptions.RemoveEmptyEntries);
 
     public static implicit operator RoutePattern(string route) => new(route);
 
